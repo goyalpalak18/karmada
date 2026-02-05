@@ -463,6 +463,41 @@ func Test_assessEvictionTasks(t *testing.T) {
 			},
 			wantCluster: nil,
 		},
+		{
+			name: "task without GracePeriodSeconds should not inherit timeout from previous task",
+			args: args{
+				bindingSpec: workv1alpha2.ResourceBindingSpec{
+					Clusters: []workv1alpha2.TargetCluster{
+						{Name: "memberA"},
+					},
+					GracefulEvictionTasks: []workv1alpha2.GracefulEvictionTask{
+						{
+							FromCluster:        "member1",
+							CreationTimestamp:  &metav1.Time{Time: timeNow.Add(time.Second * -30)},
+							GracePeriodSeconds: ptr.To[int32](20), // 20 seconds - already expired
+						},
+						{
+							FromCluster:       "member2",
+							CreationTimestamp: &metav1.Time{Time: timeNow.Add(time.Second * -30)},
+							// No GracePeriodSeconds - should use default timeout (3 minutes)
+						},
+					},
+				},
+				observedStatus: []workv1alpha2.AggregatedStatusItem{},
+				timeout:        timeout, // 3 minutes default
+				now:            timeNow,
+				hasScheduled:   false,
+			},
+			// member1 should be evicted (30s > 20s custom timeout)
+			// member2 should be kept (30s < 180s default timeout)
+			wantTask: []workv1alpha2.GracefulEvictionTask{
+				{
+					FromCluster:       "member2",
+					CreationTimestamp: &metav1.Time{Time: timeNow.Add(time.Second * -30)},
+				},
+			},
+			wantCluster: []string{"member1"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

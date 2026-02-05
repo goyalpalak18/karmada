@@ -38,8 +38,13 @@ type assessmentOption struct {
 func assessEvictionTasks(tasks []workv1alpha2.GracefulEvictionTask, now metav1.Time, opt assessmentOption) ([]workv1alpha2.GracefulEvictionTask, []string) {
 	var keptTasks []workv1alpha2.GracefulEvictionTask
 	var evictedClusters []string
+	defaultTimeout := opt.timeout
 
 	for _, task := range tasks {
+		// Reset timeout to default at each iteration to prevent tasks without
+		// custom GracePeriodSeconds from inheriting the previous task's timeout.
+		opt.timeout = defaultTimeout
+
 		// set creation timestamp for new task
 		if task.CreationTimestamp.IsZero() {
 			task.CreationTimestamp = &now
